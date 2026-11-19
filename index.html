@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClaimCheck Hybrid — Offline-first evidence checking</title>
+    <meta
+      name="description"
+      content="Check any claim with receipts: Gemini Nano screens on-device, Gemini in the cloud deep-checks via Firebase AI Logic."
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>ClaimCheck <span class="accent">Hybrid</span></h1>
+      <p class="tagline">
+        Evidence-checking with receipts. Short claims are screened
+        <strong>on-device</strong> by Gemini Nano — offline, private. Anything
+        long, doubtful or flagged escalates to a <strong>cloud deep check</strong>
+        via Firebase AI Logic.
+      </p>
+      <p id="mode-banner" class="banner">starting…</p>
+    </header>
+
+    <main>
+      <section class="card">
+        <label for="claim">Claim to check</label>
+        <textarea
+          id="claim"
+          rows="3"
+          placeholder="e.g. The QoreChain Developer Fest offers a $20,000 prize pool."
+        ></textarea>
+
+        <label for="context">Source material (optional — official docs, rules, tokenomics…)</label>
+        <textarea
+          id="context"
+          rows="7"
+          placeholder="Paste primary-source text here. The deep check quotes it verbatim."
+        ></textarea>
+
+        <div class="row">
+          <button id="run">Check this claim</button>
+          <button id="demo-case" class="secondary">Load the sample case</button>
+          <label class="check">
+            <input type="checkbox" id="force-deep" /> Always deep-check
+          </label>
+        </div>
+        <p id="status" class="status"></p>
+      </section>
+
+      <section id="result" class="card hidden"></section>
+
+      <section class="card">
+        <h2>History</h2>
+        <p class="hint" id="history-hint"></p>
+        <ul id="history"></ul>
+      </section>
+
+      <section class="card">
+        <h2>How it works</h2>
+        <ol>
+          <li><strong>On-device screen (Gemini Nano).</strong> The claim is screened locally in Chrome — no network, works offline, nothing leaves the device.</li>
+          <li><strong>Hybrid routing.</strong> Long documents, low screen confidence, red flags or an unsettled screen escalate automatically.</li>
+          <li><strong>Cloud deep check (Firebase AI Logic).</strong> Gemini in the cloud applies the ClaimCheck methodology: primary sources first, verbatim quotes, negative space reported, graded verdict.</li>
+          <li><strong>Archive.</strong> Every check is saved to Firestore (local storage in demo mode) so verdicts stay auditable.</li>
+        </ol>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        ClaimCheck Hybrid — built for #BuildHybridAI 2026 with Firebase AI Logic.
+        Methodology: primary sources first, verbatim quotes, never guess to fill a gap.
+      </p>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
