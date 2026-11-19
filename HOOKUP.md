@@ -54,6 +54,12 @@ npx firebase-tools use <your-project-id>
 npx firebase-tools deploy --only firestore:rules
 ```
 
+No CLI access? Firebase console → **Firestore Database → Rules** tab →
+replace the editor content with `firestore.rules` → **Publish**. Same
+effect. Until the rules are deployed, the database keeps its default
+deny-all rules and the app's history silently falls back to local
+storage (watch the console for "[ClaimCheck] Firestore … failed").
+
 ## Step 5 — Deploy hosting + smoke test (~2 min)
 
 ```bash
