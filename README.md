@@ -33,7 +33,7 @@ marketing.
 ## How Firebase AI Logic is used
 
 - **Hybrid model for the screen** — `getGenerativeModel(ai, { mode:
-  InferenceMode.PREFER_ON_DEVICE, inCloudParams: { model: "gemini-2.5-flash" } })`:
+  InferenceMode.PREFER_ON_DEVICE, inCloudParams: { model: "gemini-3.8-flash" } })`:
   Gemini Nano in Chrome when present, cloud Gemini as automatic fallback.
   When the Chrome Prompt API is directly available it is used for the
   screen, guaranteeing a zero-network first pass.

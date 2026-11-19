@@ -62,7 +62,7 @@ npx firebase-tools deploy --only hosting
 
 Open the hosting URL, run the bundled sample case, and confirm:
 - the banner reads "Production mode",
-- the verdict card shows `tier: cloud` with model `gemini-2.5-flash`,
+- the verdict card shows `tier: cloud` with model `gemini-3.8-flash`,
 - the check appears in Firestore under the `checks` collection,
 - in Chrome with Gemini Nano available, a short settled claim reports
   `tier: on-device`.

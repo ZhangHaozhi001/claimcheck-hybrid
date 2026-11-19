@@ -40,27 +40,53 @@ export class LocalStore implements HistoryStore {
  * Firestore-backed store. The Firestore SDK is imported dynamically so the
  * demo bundle never needs a Firebase config to boot.
  *
- * TODO-HOOKUP: requires a real Firebase project (see HOOKUP.md steps 1–3).
+ * Resilience (added after the 2026-11-19 smoke test): if Firestore is
+ * unreachable or the deployed security rules reject the operation, save
+ * and list degrade to the local store with a console warning instead of
+ * failing the whole check — a completed verdict must never be lost to a
+ * storage problem. Once the rules from firestore.rules are deployed,
+ * the Firestore path is used and the fallback stays silent.
  */
 export class FirestoreStore implements HistoryStore {
   readonly kind = "firestore" as const;
+  private readonly fallback = new LocalStore();
+  private warned = false;
 
   constructor(private readonly db: unknown) {}
 
+  private warnOnce(op: string, err: unknown): void {
+    if (this.warned) return;
+    this.warned = true;
+    console.warn(
+      `[ClaimCheck] Firestore ${op} failed (${err instanceof Error ? err.message : String(err)}); ` +
+        "history is using the local fallback. Deploy firestore.rules (HOOKUP.md step 4) to persist in Firestore.",
+    );
+  }
+
   async save(entry: HistoryEntry): Promise<void> {
-    const { collection, doc, setDoc } = await import("firebase/firestore");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ref = doc(collection(this.db as any, "checks"), entry.id);
-    await setDoc(ref, entry);
+    try {
+      const { collection, doc, setDoc } = await import("firebase/firestore");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ref = doc(collection(this.db as any, "checks"), entry.id);
+      await setDoc(ref, entry);
+    } catch (err) {
+      this.warnOnce("save", err);
+      await this.fallback.save(entry);
+    }
   }
 
   async list(limit: number): Promise<HistoryEntry[]> {
-    const { collection, getDocs, limit: fbLimit, orderBy, query } = await import(
-      "firebase/firestore"
-    );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const q = query(collection(this.db as any, "checks"), orderBy("checkedAt", "desc"), fbLimit(limit));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => d.data() as HistoryEntry);
+    try {
+      const { collection, getDocs, limit: fbLimit, orderBy, query } = await import(
+        "firebase/firestore"
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const q = query(collection(this.db as any, "checks"), orderBy("checkedAt", "desc"), fbLimit(limit));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => d.data() as HistoryEntry);
+    } catch (err) {
+      this.warnOnce("list", err);
+      return this.fallback.list(limit);
+    }
   }
 }

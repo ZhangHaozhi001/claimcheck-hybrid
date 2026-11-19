@@ -36,41 +36,85 @@ import { FirestoreStore, type HistoryStore } from "./store";
 import type { Backends } from "./pipeline";
 import type { CheckInput } from "./types";
 
-const CLOUD_MODEL = "gemini-2.5-flash";
+/**
+ * Cloud model for both the hybrid screen's cloud fallback and the deep
+ * check. NOTE (2026-11-19 smoke test): gemini-2.5-flash is retired for
+ * new users — the live API answers 404 "no longer available to new
+ * users" and names gemini-3.8-flash as the replacement, which was
+ * verified working against this project (see BUILD-REPORT.md 冒烟）.
+ */
+const CLOUD_MODEL = "gemini-3.8-flash";
 
 let app: FirebaseApp | null = null;
 let ai: AI | null = null;
 let db: Firestore | null = null;
+let readyPromise: Promise<{ app: FirebaseApp; ai: AI; db: Firestore }> | null = null;
 
-function ensureApp(): { app: FirebaseApp; ai: AI; db: Firestore } {
-  if (app && ai && db) return { app, ai, db };
-  app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  ai = getAI(app, { backend: new GoogleAIBackend() });
-  void initAppCheck(app);
-  return { app, ai, db };
+/**
+ * Initialise Firebase exactly once. ORDER MATTERS: App Check must be
+ * initialised BEFORE getAI(). The AI service snapshots the app-check
+ * instance in its constructor (getImmediate({ optional: true })); if
+ * App Check is not registered yet at that moment, the snapshot is null
+ * forever, no X-Firebase-AppCheck header is ever attached, and every
+ * AI Logic call fails with 401 "Firebase App Check token is invalid".
+ * (Found by the 2026-11-19 smoke test — see BUILD-REPORT.md 冒烟一节.)
+ */
+function ensureApp(): Promise<{ app: FirebaseApp; ai: AI; db: Firestore }> {
+  if (app && ai && db) return Promise.resolve({ app, ai, db });
+  if (!readyPromise) {
+    readyPromise = (async () => {
+      app = initializeApp(firebaseConfig);
+      await initAppCheck(app);
+      ai = getAI(app, { backend: new GoogleAIBackend() });
+      db = getFirestore(app);
+      return { app, ai, db };
+    })();
+  }
+  return readyPromise;
 }
 
 /**
- * Firebase AI Logic requires App Check. With a reCAPTCHA Enterprise site
- * key in VITE_RECAPTCHA_SITE_KEY we initialise the real provider; for
- * judging, a debug token is accepted instead (see HOOKUP.md step 3).
+ * Firebase AI Logic requires App Check. Two supported setups:
+ *  - reCAPTCHA Enterprise: set VITE_RECAPTCHA_SITE_KEY and the real
+ *    provider is initialised.
+ *  - Debug token (judging shortcut, HOOKUP.md step 3): set
+ *    VITE_APPCHECK_DEBUG_TOKEN to a token registered in the console
+ *    (App Check → Manage debug tokens). The value is injected at build
+ *    time from .env (git-ignored) and is never committed to the repo.
+ *    In debug mode the SDK exchanges it for a real App Check token via
+ *    REST and never calls the provider, so a placeholder provider that
+ *    always rejects is safe — and loud if debug mode ever fails to
+ *    engage.
  */
 async function initAppCheck(firebaseApp: FirebaseApp): Promise<void> {
-  const siteKey = (import.meta.env as Record<string, string | undefined>)
-    .VITE_RECAPTCHA_SITE_KEY;
-  if (!siteKey) {
+  const env = import.meta.env as Record<string, string | undefined>;
+  const siteKey = env.VITE_RECAPTCHA_SITE_KEY;
+  const debugToken = env.VITE_APPCHECK_DEBUG_TOKEN;
+  if (!siteKey && !debugToken) {
     console.warn(
-      "[ClaimCheck] VITE_RECAPTCHA_SITE_KEY not set — App Check not initialised. " +
-        "TODO-HOOKUP: see HOOKUP.md step 3 (a debug token is fine for judging).",
+      "[ClaimCheck] Neither VITE_RECAPTCHA_SITE_KEY nor VITE_APPCHECK_DEBUG_TOKEN is set — " +
+        "App Check not initialised. TODO-HOOKUP: see HOOKUP.md step 3 (a debug token is fine for judging).",
     );
     return;
   }
-  const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import(
-    "firebase/app-check"
-  );
+  const { initializeAppCheck, ReCaptchaEnterpriseProvider, CustomProvider } =
+    await import("firebase/app-check");
+  if (debugToken) {
+    (self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: string })
+      .FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
+    initializeAppCheck(firebaseApp, {
+      provider: new CustomProvider({
+        getToken: () =>
+          Promise.reject(
+            new Error("App Check debug token active — provider must not be called"),
+          ),
+      }),
+      isTokenAutoRefreshEnabled: true,
+    });
+    return;
+  }
   initializeAppCheck(firebaseApp, {
-    provider: new ReCaptchaEnterpriseProvider(siteKey),
+    provider: new ReCaptchaEnterpriseProvider(siteKey as string),
     isTokenAutoRefreshEnabled: true,
   });
 }
@@ -98,7 +142,7 @@ function userText(input: CheckInput): string {
 }
 
 export async function createFirebaseBackends(): Promise<Backends> {
-  const { ai: aiInstance } = ensureApp();
+  const { ai: aiInstance } = await ensureApp();
   const screen = screenModel(aiInstance);
   const deep = deepModel(aiInstance);
 
@@ -132,6 +176,6 @@ export async function createFirebaseBackends(): Promise<Backends> {
 }
 
 export async function createHistoryStore(): Promise<HistoryStore> {
-  const { db: firestore } = ensureApp();
+  const { db: firestore } = await ensureApp();
   return new FirestoreStore(firestore);
 }
