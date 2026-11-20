@@ -13,6 +13,48 @@ record does not settle the question.
 
 Built for **#BuildHybridAI 2026** (Google × Firebase, Devpost) — Web track.
 
+## How AI is used
+
+AI does the actual checking in this project — it is not a chatbot bolted
+onto a static page. The pipeline has two AI tiers and one deterministic
+(non-AI) router between them:
+
+1. **On-device AI screen — Gemini Nano** (Chrome Prompt API, or Firebase
+   AI Logic in `PREFER_ON_DEVICE` mode). The model reads the pasted claim
+   and produces a preliminary graded verdict, a confidence score, and
+   red-flag detection (e.g. money cited with no payout asset named,
+   superlatives with no source, dates with no primary announcement). This
+   pass runs locally: no network, and the claim text never leaves the
+   device.
+2. **Deterministic router** (`src/router.ts`, plain rules, fully unit
+   tested). It escalates a check to the cloud when the input is long
+   (> 600 chars), the screen confidence is < 0.70, any red flag fired,
+   the screen returned `UNVERIFIABLE`, or the user asked for a deep
+   check. Short claims the screen can settle never leave the device.
+3. **Cloud AI deep check — Gemini** (`gemini-3.8-flash` via Firebase AI
+   Logic, `ONLY_IN_CLOUD` mode, so it never silently degrades to the
+   small model). The model applies the ClaimCheck methodology encoded in
+   `src/methodology.ts`: primary sources first, a verbatim quote for
+   every load-bearing fact, the negative space ("searched, not found")
+   reported explicitly, and an honest `UNVERIFIABLE` when the record
+   does not settle the question. Model output is parsed and validated
+   against a strict schema (`src/verdict.ts`) before it is shown or
+   archived; malformed output is rejected, not rendered.
+
+Every archived check records which tier produced the verdict and why it
+was routed there, so the AI's role in each result is auditable.
+
+### Injective integration
+
+**None — stated plainly.** ClaimCheck Hybrid contains no Injective (or
+any other) on-chain components: no smart contracts, no wallet, no chain
+calls. It is submitted to the Injective Solo AI Builder Sprint as an
+AI-powered repository, which the sprint rules explicitly allow
+(on-chain integration is optional, not required). The ClaimCheck
+methodology itself originated as a human-delivered evidence-checking
+service listed on the NEAR AI Agent Market; this repository is the
+standalone AI application built from that methodology.
+
 ## Why hybrid?
 
 | | On-device screen (Gemini Nano) | Cloud deep check (Gemini) |
